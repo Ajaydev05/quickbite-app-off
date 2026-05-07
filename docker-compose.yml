@@ -1,0 +1,67 @@
+version: '3.9'
+
+services:
+
+  mongodb:
+    image: mongo:7.0
+    container_name: foodapp-mongodb
+    ports:
+      - "27017:27017"
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: root
+      MONGO_INITDB_ROOT_PASSWORD: rootpassword
+      MONGO_INITDB_DATABASE: foodapp
+    volumes:
+      - mongo_data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - foodapp-network
+
+  backend:
+    build:
+      context: ./backend
+      target: production
+    container_name: foodapp-backend
+    ports:
+      - "5000:5000"
+    environment:
+      PORT: 5000
+      NODE_ENV: development
+      MONGODB_URI: mongodb://root:rootpassword@mongodb:27017/foodapp?authSource=admin
+      JWT_SECRET: dev_jwt_secret_change_in_prod
+      JWT_EXPIRES_IN: 7d
+      FRONTEND_URL: http://localhost:3000
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    volumes:
+      - ./backend/src:/app/src       # hot reload in dev
+    networks:
+      - foodapp-network
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      target: production
+    container_name: foodapp-frontend
+    ports:
+      - "3000:80"
+    environment:
+      REACT_APP_API_URL: http://localhost:5000/api
+    depends_on:
+      - backend
+    networks:
+      - foodapp-network
+    restart: unless-stopped
+
+volumes:
+  mongo_data:
+
+networks:
+  foodapp-network:
+    driver: bridge

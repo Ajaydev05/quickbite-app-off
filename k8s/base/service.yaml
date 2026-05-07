@@ -1,0 +1,103 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# service.yaml — Services, ConfigMap, and Secrets
+# ─────────────────────────────────────────────────────────────────────────────
+
+---
+# ── MongoDB Headless Service ───────────────────────────────────────────────────
+# Headless (clusterIP: None) is required for StatefulSets.
+# Pods use DNS: mongodb-0.mongodb.default.svc.cluster.local
+# Backend connects using: mongodb://mongodb:27017
+apiVersion: v1
+kind: Service
+metadata:
+  name: mongodb
+  namespace: default
+  labels:
+    app: mongodb
+spec:
+  clusterIP: None             # headless — no virtual IP, DNS points to pod directly
+  selector:
+    app: mongodb
+  ports:
+  - name: mongo
+    port: 27017
+    targetPort: 27017
+
+---
+# ── Backend Service (NodePort) ────────────────────────────────────────────────
+# Exposed on NodePort 30002 for direct API access if needed.
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend-service
+  namespace: default
+  labels:
+    app: backend
+spec:
+  type: NodePort
+  selector:
+    app: backend
+  ports:
+  - name: http
+    port: 5000
+    targetPort: 5000
+    nodePort: 30002           # open this in your Security Group if needed
+
+---
+# ── Frontend Service (NodePort) ───────────────────────────────────────────────
+# NodePort 30001 is how users access the app from outside the cluster.
+# Access: http://WORKER_NODE_PUBLIC_IP:30001
+apiVersion: v1
+kind: Service
+metadata:
+  name: frontend-service
+  namespace: default
+  labels:
+    app: frontend
+spec:
+  type: NodePort
+  selector:
+    app: frontend
+  ports:
+  - name: http
+    port: 80
+    targetPort: 80
+    nodePort: 30001           # fixed port — open this in your Security Group
+
+---
+# ── Backend ConfigMap ─────────────────────────────────────────────────────────
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: backend-config
+  namespace: default
+data:
+  PORT: "5000"
+  NODE_ENV: "production"
+  MONGODB_URI: "mongodb://mongodb:27017/foodapp"
+  JWT_EXPIRES_IN: "7d"
+  FRONTEND_URL: "http://frontend-service"
+
+---
+# ── Backend Secret ────────────────────────────────────────────────────────────
+# IMPORTANT: Change JWT_SECRET before deploying to production!
+apiVersion: v1
+kind: Secret
+metadata:
+  name: backend-secrets
+  namespace: default
+type: Opaque
+stringData:
+  JWT_SECRET: "CHANGE_THIS_TO_A_STRONG_RANDOM_SECRET"
+
+---
+# ── MongoDB Secret ────────────────────────────────────────────────────────────
+apiVersion: v1
+kind: Secret
+metadata:
+  name: mongodb-secrets
+  namespace: default
+type: Opaque
+stringData:
+  MONGO_INITDB_ROOT_USERNAME: "foodapp_user"
+  MONGO_INITDB_ROOT_PASSWORD: "CHANGE_THIS_PASSWORD"
